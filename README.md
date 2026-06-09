@@ -13,6 +13,12 @@ Production-grade integration platform for **NRG Clinic** covering:
 - **CRM** — Zoho CRM contact upsert and notes
 - **Workflow automation** — n8n and Keragon workflow JSON (3 + 2 included)
 
+## Business Problem Solved
+
+NRG Clinic needed to migrate from Charm Health EHR to Healthie while maintaining HIPAA compliance across all patient data. The core challenge: moving clinical data (patients, visits, prescriptions, lab orders) from a legacy system to a modern platform without data loss or PHI exposure, while simultaneously building the automation layer that powers their e-commerce telehealth model.
+
+This build delivers a production-ready EHR migration pipeline (idempotent, partial-failure tracking), HIPAA-compliant data architecture (AES-256-GCM encryption with HMAC blind indexes, append-only audit log), and the full integration layer for e-prescribing (DoseSpot), lab orders (LabCorp), billing (Stripe), and CRM (Zoho) — all wired through n8n/Keragon automation for patient journey orchestration.
+
 ## Stack
 
 | Layer | Choice |
