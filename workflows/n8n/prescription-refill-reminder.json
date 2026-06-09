@@ -1,0 +1,63 @@
+{
+  "name": "nrg-prescription-refill-reminder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      },
+      "id": "cron",
+      "name": "Every 6h",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.NRG_API_BASE_URL }}/internal/refill-candidates",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Internal-Token", "value": "={{ $env.NRG_INTERNAL_TOKEN }}" }
+          ]
+        }
+      },
+      "id": "fetch",
+      "name": "Fetch refill candidates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 25,
+        "options": {}
+      },
+      "id": "split",
+      "name": "Split",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "channel": "#prescriptions",
+        "text": "=Refill reminder queued for {{ $json.patientName }} — {{ $json.drug }} ({{ $json.daysRemaining }}d left).",
+        "otherOptions": {}
+      },
+      "id": "slack",
+      "name": "Notify #prescriptions",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Every 6h": { "main": [[{ "node": "Fetch refill candidates", "type": "main", "index": 0 }]] },
+    "Fetch refill candidates": { "main": [[{ "node": "Split", "type": "main", "index": 0 }]] },
+    "Split": { "main": [[{ "node": "Notify #prescriptions", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

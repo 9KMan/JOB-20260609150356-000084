@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NRG Clinic — Healthcare Integration Console</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #131a35;
+      --muted: #8ea0c2;
+      --text: #e7eaf6;
+      --accent: #6ea8ff;
+      --good: #4ade80;
+      --warn: #fbbf24;
+      --bad:  #f87171;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    header { padding: 20px 28px; border-bottom: 1px solid #1d2548; display: flex; align-items: center; gap: 16px; }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    header .pill { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: #1c2547; color: var(--muted); }
+    main { padding: 24px 28px; max-width: 1100px; margin: 0 auto; }
+    h2 { font-size: 14px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin: 24px 0 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .card { background: var(--card); border: 1px solid #1f2750; border-radius: 12px; padding: 16px; }
+    .card h3 { margin: 0 0 4px; font-size: 14px; }
+    .card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .kpi { font-size: 28px; font-weight: 700; margin: 6px 0 2px; }
+    .ok { color: var(--good); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    button { background: var(--accent); color: #04122b; border: 0; padding: 8px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    pre { background: #060a18; border: 1px solid #1d2548; border-radius: 8px; padding: 10px; overflow: auto; font-size: 12px; color: var(--muted); }
+    .row { display: flex; gap: 8px; align-items: center; }
+    input, select { background: #0a1130; color: var(--text); border: 1px solid #1f2750; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
+    .footer { padding: 20px 28px; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>NRG Clinic — Integration Console</h1>
+    <span class="pill" id="env-pill">env: …</span>
+    <span class="pill" id="org-pill">org: …</span>
+    <span class="pill ok" id="health-pill">…</span>
+  </header>
+
+  <main>
+    <h2>Migration</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Charm Health → Healthie</h3>
+        <p>Last run: <span id="last-run">—</span></p>
+        <div class="kpi" id="migrated-kpi">—</div>
+        <p>patients migrated</p>
+        <div class="row">
+          <button id="run-migration">Run migration now</button>
+        </div>
+        <pre id="migration-log" style="margin-top:10px; max-height:160px;"></pre>
+      </div>
+    </div>
+
+    <h2>Today's vitals</h2>
+    <div class="grid">
+      <div class="card"><h3>Appointments today</h3><div class="kpi" id="appts-today">—</div><p>scheduled</p></div>
+      <div class="card"><h3>Open prescriptions</h3><div class="kpi" id="rx-open">—</div><p>pending / sent</p></div>
+      <div class="card"><h3>Lab orders in flight</h3><div class="kpi" id="labs-open">—</div><p>not yet resulted</p></div>
+      <div class="card"><h3>Failed payments (24h)</h3><div class="kpi bad" id="payments-failed">—</div><p>needs follow-up</p></div>
+    </div>
+
+    <h2>Quick action</h2>
+    <div class="card">
+      <p>Create a telehealth session for an appointment</p>
+      <div class="row">
+        <input id="appt-id" placeholder="appointment id" style="flex:1;" />
+        <select id="appt-provider">
+          <option value="doxy">Doxy.me</option>
+          <option value="zoom">Zoom</option>
+          <option value="custom">Custom URL</option>
+        </select>
+        <button id="create-session">Create session</button>
+      </div>
+      <pre id="session-result" style="margin-top:10px;"></pre>
+    </div>
+  </main>
+
+  <div class="footer">
+    <span>GraphQL endpoint:</span>
+    <code>/graphql</code>
+    <span style="margin-left:16px;">REST health:</span>
+    <code>/healthz</code>
+  </div>
+
+  <script>
+    // The console expects the API to be on the same origin. The auth
+    // token is read from localStorage under the key "nrg_jwt".
+    const API = (path) => path.startsWith('http') ? path : path;
+    const TOKEN = localStorage.getItem('nrg_jwt');
+
+    async function gql(query, variables) {
+      const res = await fetch(API('/graphql'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(TOKEN ? { 'Authorization': `Bearer ${TOKEN}` } : {}),
+        },
+        body: JSON.stringify({ query, variables }),
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors.map(e => e.message).join('; '));
+      return json.data;
+    }
+
+    async function refresh() {
+      try {
+        const r = await fetch(API('/healthz')).then(r => r.json());
+        document.getElementById('health-pill').textContent = r.status;
+        document.getElementById('health-pill').classList.add('ok');
+        document.getElementById('env-pill').textContent = 'env: ' + (r.service || 'unknown');
+      } catch (e) {
+        const el = document.getElementById('health-pill');
+        el.textContent = 'down';
+        el.classList.remove('ok');
+        el.classList.add('bad');
+      }
+    }
+
+    document.getElementById('run-migration').addEventListener('click', async () => {
+      const log = document.getElementById('migration-log');
+      const btn = document.getElementById('run-migration');
+      btn.disabled = true;
+      log.textContent = 'starting…\n';
+      try {
+        const data = await gql(`mutation { runCharmToHealthieMigration {
+          id patientsTotal patientsMigrated patientsFailed
+          appointmentsTotal appointmentsMigrated appointmentsFailed
+        } }`);
+        log.textContent += JSON.stringify(data.runCharmToHealthieMigration, null, 2);
+        document.getElementById('migrated-kpi').textContent = data.runCharmToHealthieMigration.patientsMigrated;
+        document.getElementById('last-run').textContent = new Date().toLocaleString();
+      } catch (e) {
+        log.textContent += 'ERROR: ' + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('create-session').addEventListener('click', async () => {
+      const apptId = document.getElementById('appt-id').value;
+      const provider = document.getElementById('appt-provider').value;
+      const out = document.getElementById('session-result');
+      if (!apptId) { out.textContent = 'enter an appointment id'; return; }
+      try {
+        const data = await gql(
+          `mutation($id: ID!, $p: String!) { createTelehealthSession(appointmentId: $id, provider: $p) { sessionId url } }`,
+          { id: apptId, p: provider }
+        );
+        out.textContent = JSON.stringify(data.createTelehealthSession, null, 2);
+      } catch (e) {
+        out.textContent = 'ERROR: ' + e.message;
+      }
+    });
+
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+</body>
+</html>

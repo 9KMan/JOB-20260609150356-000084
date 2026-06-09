@@ -1,0 +1,96 @@
+{
+  "name": "nrg-patient-intake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "patient-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-in",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "patient-intake"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate incoming event from NRG Clinic API.\nconst event = $json.body || $json;\nif (!event || !event.type || !event.organisationId) {\n  throw new Error('Invalid event payload');\n}\nconst out = {\n  type: event.type,\n  organisationId: event.organisationId,\n  receivedAt: new Date().toISOString(),\n  payload: event.payload || {},\n};\nreturn [{ json: out }];"
+      },
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.type }}",
+              "operation": "equals",
+              "value2": "patient.created"
+            }
+          ]
+        }
+      },
+      "id": "if-patient",
+      "name": "If patient.created",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.zohoapis.com/crm/v2/Contacts/upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "zohoOAuth2Api",
+        "options": {},
+        "body": {
+          "data": "={{ [{ First_Name: $json.payload.firstName, Last_Name: $json.payload.lastName, Email: $json.payload.email, External_ID: $json.payload.id }] }}",
+          "duplicate_check_fields": "[\"Email\"]"
+        }
+      },
+      "id": "zoho-upsert",
+      "name": "Zoho Upsert Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.NRG_API_BASE_URL }}/internal/events",
+        "options": {},
+        "body": "={{ $json }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Internal-Source", "value": "n8n" }
+          ]
+        }
+      },
+      "id": "ack",
+      "name": "Ack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
+    "Validate": { "main": [[{ "node": "If patient.created", "type": "main", "index": 0 }]] },
+    "If patient.created": {
+      "main": [
+        [{ "node": "Zoho Upsert Contact", "type": "main", "index": 0 }],
+        [{ "node": "Ack", "type": "main", "index": 0 }]
+      ]
+    },
+    "Zoho Upsert Contact": { "main": [[{ "node": "Ack", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

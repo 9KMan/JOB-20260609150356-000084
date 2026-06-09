@@ -1,0 +1,81 @@
+{
+  "name": "nrg-lab-result-routing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lab-result",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "lab-result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.abnormalFlag }}",
+              "operation": "notEqual",
+              "value2": "N"
+            },
+            {
+              "value1": "={{ $json.body.abnormalFlag }}",
+              "operation": "exists"
+            }
+          ]
+        }
+      },
+      "id": "is-abnormal",
+      "name": "Abnormal?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "channel": "#clinical-alerts",
+        "text": "=Abnormal lab result for patient {{ $json.body.patientMrn }}: {{ $json.body.testName }} = {{ $json.body.value }} {{ $json.body.unit }} ({{ $json.body.abnormalFlag }})",
+        "otherOptions": {}
+      },
+      "id": "slack-alert",
+      "name": "Slack: Clinical Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.NRG_API_BASE_URL }}/internal/lab-result-log",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Internal-Source", "value": "n8n" }
+          ]
+        },
+        "body": "={{ $json.body }}"
+      },
+      "id": "log",
+      "name": "Log to API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 420]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Abnormal?", "type": "main", "index": 0 }]] },
+    "Abnormal?": {
+      "main": [
+        [{ "node": "Slack: Clinical Alerts", "type": "main", "index": 0 }],
+        [{ "node": "Log to API", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}

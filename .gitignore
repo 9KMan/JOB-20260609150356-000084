@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+worker.log
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Docker
+.docker/
+
+# Worker-internal files (never push to GitHub)
+TASK.txt
+SPEC.txt
+pid
+role
+PROPOSAL.md
+COVER_LETTER.txt
+
+# Local dev
+*.local
+/tmp/
+.cache/
+
+# Prisma
+prisma/dev.db*

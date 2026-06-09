@@ -1,0 +1,103 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nrg
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: nrg_clinic
+    ports:
+      - "5432:5432"
+    volumes:
+      - nrg_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nrg -d nrg_clinic"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgres://nrg:dev@postgres:5432/nrg_clinic
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-do-not-use-in-prod-32b}
+      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:-}
+      HEALTHIE_API_KEY: ${HEALTHIE_API_KEY:-}
+      HEALTHIE_API_SECRET: ${HEALTHIE_API_SECRET:-}
+      CHARM_HEALTH_API_KEY: ${CHARM_HEALTH_API_KEY:-}
+      CHARM_HEALTH_USERNAME: ${CHARM_HEALTH_USERNAME:-}
+      CHARM_HEALTH_PASSWORD: ${CHARM_HEALTH_PASSWORD:-}
+      DOSESPOT_API_KEY: ${DOSESPOT_API_KEY:-}
+      DOSESPOT_API_SECRET: ${DOSESPOT_API_SECRET:-}
+      DOSESPOT_CLINIC_ID: ${DOSESPOT_CLINIC_ID:-}
+      LABCORP_API_KEY: ${LABCORP_API_KEY:-}
+      LABCORP_ACCOUNT_ID: ${LABCORP_ACCOUNT_ID:-}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      ZOHO_CRM_CLIENT_ID: ${ZOHO_CRM_CLIENT_ID:-}
+      ZOHO_CRM_CLIENT_SECRET: ${ZOHO_CRM_CLIENT_SECRET:-}
+      ZOHO_CRM_REFRESH_TOKEN: ${ZOHO_CRM_REFRESH_TOKEN:-}
+      N8N_BASE_URL: ${N8N_BASE_URL:-http://n8n:5678}
+      N8N_API_KEY: ${N8N_API_KEY:-}
+      KERAGON_API_KEY: ${KERAGON_API_KEY:-}
+    ports:
+      - "4000:4000"
+
+  worker:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://nrg:dev@postgres:5432/nrg_clinic
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-do-not-use-in-prod-32b}
+      HEALTHIE_API_KEY: ${HEALTHIE_API_KEY:-}
+      HEALTHIE_API_SECRET: ${HEALTHIE_API_SECRET:-}
+      CHARM_HEALTH_API_KEY: ${CHARM_HEALTH_API_KEY:-}
+      CHARM_HEALTH_USERNAME: ${CHARM_HEALTH_USERNAME:-}
+      CHARM_HEALTH_PASSWORD: ${CHARM_HEALTH_PASSWORD:-}
+      LABCORP_API_KEY: ${LABCORP_API_KEY:-}
+      LABCORP_ACCOUNT_ID: ${LABCORP_ACCOUNT_ID:-}
+      KERAGON_API_KEY: ${KERAGON_API_KEY:-}
+    command: ["node", "dist/src/workers/scheduler.js"]
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: nrg
+      DB_POSTGRESDB_PASSWORD: dev
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: admin
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-admin}
+    ports:
+      - "5678:5678"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  nrg_pg:

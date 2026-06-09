@@ -1,0 +1,59 @@
+{
+  "name": "nrg-billing-reconciliation",
+  "kind": "keragon.workflow/v1",
+  "description": "Nightly Stripe payment reconciliation: pull yesterday's charges and update the local payments table status.",
+  "trigger": {
+    "type": "schedule",
+    "cron": "0 3 * * *"
+  },
+  "steps": [
+    {
+      "id": "list-charges",
+      "type": "http",
+      "action": "request",
+      "config": {
+        "method": "GET",
+        "url": "https://api.stripe.com/v1/charges",
+        "headers": {
+          "Authorization": "Bearer {{ secrets.STRIPE_API_KEY }}"
+        },
+        "query": {
+          "created[gte]": "{{ steps.schedule.input.start_ts }}",
+          "created[lte]": "{{ steps.schedule.input.end_ts }}",
+          "limit": "100"
+        }
+      }
+    },
+    {
+      "id": "for-each",
+      "type": "loop",
+      "input": "{{ steps.list-charges.output.data }}",
+      "steps": [
+        {
+          "id": "update-payment",
+          "type": "http",
+          "action": "request",
+          "config": {
+            "method": "POST",
+            "url": "{{ secrets.NRG_API_BASE_URL }}/internal/payments/reconcile",
+            "headers": {
+              "X-Internal-Token": "{{ secrets.NRG_INTERNAL_TOKEN }}",
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "stripe_charge_id": "{{ item.id }}",
+              "status": "{{ item.status }}",
+              "amount_cents": "{{ item.amount }}",
+              "receipt_url": "{{ item.receipt_url }}"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "secrets": [
+    "STRIPE_API_KEY",
+    "NRG_API_BASE_URL",
+    "NRG_INTERNAL_TOKEN"
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "name": "nrg-charm-to-healthie-migration",
+  "kind": "keragon.workflow/v1",
+  "description": "Daily Charm Health → Healthie delta sync. Triggered by a scheduled run from the NRG Clinic API or a manual admin button.",
+  "trigger": {
+    "type": "webhook",
+    "method": "POST",
+    "path": "/v1/workflows/charm-to-healthie/trigger"
+  },
+  "steps": [
+    {
+      "id": "auth",
+      "type": "http",
+      "action": "request",
+      "config": {
+        "method": "GET",
+        "url": "https://api.gethealthie.com/graphql",
+        "headers": {
+          "Authorization": "Basic {{ secrets.HEALTHIE_AUTH }}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "query": "query { viewer { id full_name } }"
+        }
+      }
+    },
+    {
+      "id": "list-charm",
+      "type": "http",
+      "action": "request",
+      "config": {
+        "method": "GET",
+        "url": "https://api.charmhealth.com/ehr/v1/patients",
+        "headers": {
+          "Authorization": "Basic {{ secrets.CHARM_AUTH }}"
+        },
+        "query": {
+          "page": "1",
+          "pageSize": "200",
+          "since": "{{ steps.schedule.input.since }}"
+        }
+      }
+    },
+    {
+      "id": "for-each-patient",
+      "type": "loop",
+      "input": "{{ steps.list-charm.output.patients }}",
+      "steps": [
+        {
+          "id": "create-healthie",
+          "type": "http",
+          "action": "request",
+          "config": {
+            "method": "POST",
+            "url": "https://api.gethealthie.com/graphql",
+            "headers": {
+              "Authorization": "Basic {{ secrets.HEALTHIE_AUTH }}",
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "query": "mutation($input: CreatePatientInput!) { createPatient(input: $input) { patient { id } } }",
+              "variables": {
+                "input": {
+                  "first_name": "{{ item.first_name }}",
+                  "last_name": "{{ item.last_name }}",
+                  "email": "{{ item.email }}",
+                  "phone_number": "{{ item.phone }}",
+                  "date_of_birth": "{{ item.dob }}",
+                  "external_id": "{{ item.patient_id }}"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "log",
+          "type": "log",
+          "message": "migrated patient {{ item.patient_id }} -> {{ steps.create-healthie.output.data.createPatient.patient.id }}"
+        }
+      ]
+    }
+  ],
+  "secrets": [
+    "HEALTHIE_AUTH",
+    "CHARM_AUTH"
+  ]
+}
